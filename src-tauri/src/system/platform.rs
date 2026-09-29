@@ -79,7 +79,7 @@ mod imp {
             if IsIconic(hwnd) != 0 {
                 ShowWindow(hwnd, SW_RESTORE);
             }
-            SetForegroundWindow(hwnd)
+            SetForegroundWindow(hwnd) != 0
         }
     }
 

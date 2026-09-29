@@ -72,7 +72,8 @@ pub async fn run_powershell(_app: &AppHandle, args: &Value) -> ToolResult {
         .stderr(std::process::Stdio::piped());
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
+        // tokio::process::Command has an inherent `creation_flags` on Windows;
+        // no std CommandExt import needed.
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
