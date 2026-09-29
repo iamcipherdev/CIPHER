@@ -1,0 +1,99 @@
+# CIPHER — native Windows production build.
+#
+# Produces the real Tauri 2 production bundle (custom-protocol enabled,
+# frontend served from the packaged dist/) as an NSIS installer:
+#   - src-tauri/target/release/cipher.exe        (renamed CIPHER.exe)
+#   - src-tauri/target/release/bundle/nsis/*-setup.exe (renamed CIPHER-Setup.exe)
+#
+# This is the ONLY supported Windows pipeline. Manual cross builds
+# (cargo xwin) plus hand-rolled NSIS are deprecated — they produce a
+# release binary that still points at the dev server URL.
+
+name: windows-build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Rust (stable, MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Frontend tests (vitest)
+        run: npm test
+
+      - name: Frontend production build
+        run: npm run build
+
+      - name: Verify dist output exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/index.html")) {
+            throw "dist/index.html missing — frontend build did not produce the packaged entrypoint"
+          }
+          Write-Host "dist/index.html present"
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # Tauri production build: runs beforeBuildCommand (npm run build), embeds
+      # frontendDist ../dist into the binary with the custom-protocol asset
+      # handler, then bundles NSIS. Dev server / devUrl is NOT used here.
+      - name: Tauri production build (NSIS)
+        run: npm run tauri build -- --bundles nsis
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          CI: "true"
+
+      - name: Verify release artifacts exist
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/cipher.exe"
+          if (-not (Test-Path $exe)) { throw "cipher.exe missing after build" }
+          $setup = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "NSIS setup exe missing after build" }
+          Write-Host "release exe: $exe ($((Get-Item $exe).Length) bytes)"
+          Write-Host "installer:   $($setup.FullName) ($($setup.Length) bytes)"
+
+      - name: Collect artifacts (CIPHER.exe + CIPHER-Setup.exe)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "release-out" | Out-Null
+          Copy-Item "src-tauri/target/release/cipher.exe" "release-out/CIPHER.exe"
+          $setup = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" | Select-Object -First 1
+          Copy-Item $setup.FullName "release-out/CIPHER-Setup.exe"
+          Get-FileHash "release-out/CIPHER.exe" -Algorithm SHA256 | Format-List
+          Get-FileHash "release-out/CIPHER-Setup.exe" -Algorithm SHA256 | Format-List
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CIPHER-windows
+          path: |
+            release-out/CIPHER.exe
+            release-out/CIPHER-Setup.exe
+          if-no-files-found: error

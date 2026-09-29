@@ -1,0 +1,54 @@
+[package]
+name = "cipher"
+version = "0.2.0"
+description = "CIPHER — AI operating layer for Windows"
+authors = ["CIPHER"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "cipher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+sysinfo = "0.33"
+arboard = "3"
+trash = "5"
+open = "5"
+base64 = "0.22"
+chrono = "0.4"
+uuid = { version = "1", features = ["v4"] }
+regex = "1"
+dirs = "5"
+ureq = { version = "2", features = ["json"] }
+image = "0.25"
+keyring = { version = "3", features = ["windows-native", "sync-secret-service"] }
+screenshots = "0.8"
+walkdir = "2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = [
+  "winuser",
+  "processthreadsapi",
+  "handleapi",
+  "psapi",
+  "winbase",
+  "windef",
+  "impl-default",
+] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
